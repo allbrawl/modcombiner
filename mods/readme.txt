@@ -1,0 +1,1 @@
+Add mod apks in this folder. Supported formats: *.apk, *.zip, extracted apk.
