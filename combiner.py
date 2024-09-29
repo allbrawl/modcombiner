@@ -62,12 +62,6 @@ def get_default_value(dtype):
     else:
         return ''
 
-def value_to_string(value, dtype):
-    if dtype == 'boolean':
-        return 'True' if value else 'False'
-    else:
-        return str(value)
-
 def apply_config(df, file):
     mod_config = config.get("values", {})
     col_data_types = {}
@@ -116,12 +110,11 @@ def apply_config(df, file):
                     if col in df.columns:
                         dtype = df.loc[dtype_row_index, col]
                         default_value = get_default_value(dtype)
-                        value_str = value_to_string(value, dtype)
                         for index in data_start_indices:
                             current_value = df.at[index, col]
                             # Only overwrite if current value is empty or default
                             if pd.isna(current_value) or current_value == default_value or current_value == '':
-                                df.at[index, col] = value_str
+                                df.at[index, col] = str(value)
 
             # Step 4: Apply specific updates for identifiers
             for identifier, updates in entries.items():
@@ -131,8 +124,7 @@ def apply_config(df, file):
                             for col, value in updates.items():
                                 if col in df.columns:
                                     dtype = df.loc[dtype_row_index, col]
-                                    value_str = value_to_string(value, dtype)
-                                    df.at[index, col] = value_str
+                                    df.at[index, col] = str(value)
     return df
 
 
