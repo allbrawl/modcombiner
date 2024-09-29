@@ -5,24 +5,129 @@ from datetime import datetime
 import subprocess
 import argparse
 import json
-import shlex
 
 def ensure_directory(path):
     if not os.path.exists(path):
         os.makedirs(path)
 
-def merge_csv_files(file1, file2, output_file):
-    df1 = pd.read_csv(file1) if os.path.exists(file1) else pd.DataFrame()
-    df2 = pd.read_csv(file2) if os.path.exists(file2) else pd.DataFrame()
+def merge_csv_files(base_file, mod_file, output_file):
+    # Read CSV files with header=None
+    df_base = pd.read_csv(base_file, header=None, dtype=str, keep_default_na=False) if os.path.exists(base_file) else pd.DataFrame()
+    df_mod = pd.read_csv(mod_file, header=None, dtype=str, keep_default_na=False) if os.path.exists(mod_file) else pd.DataFrame()
 
-    if df2.empty:
-        return
+    if not df_base.empty:
+        df_base.columns = df_base.iloc[0]  # Set headers
+        df_base = df_base.drop(df_base.index[0])  # Remove header row
 
-    if df1.empty:
-        return
+    if not df_mod.empty:
+        df_mod.columns = df_mod.iloc[0]
+        df_mod = df_mod.drop(df_mod.index[0])
 
-    merged_df = pd.concat([df1, df2[~df2[df2.columns[0]].isin(df1[df1.columns[0]])]])
-    merged_df.to_csv(output_file, index=False)
+    # Apply configuration to df_base
+    df_base = apply_config(df_base, base_file)
+
+    # Now, get header and data type rows from df_base
+    header_row = pd.DataFrame([df_base.columns.tolist()], columns=df_base.columns)
+    dtype_row = df_base.iloc[0:1]  # Data type row
+
+    # Exclude data type row from df_base
+    df_base_data = df_base.iloc[1:]
+
+    # Similarly for df_mod, get data type row and data
+    dtype_row_mod = df_mod.iloc[0:1]
+    df_mod_data = df_mod.iloc[1:]
+
+    # Merge data, excluding data type row
+    merged_data = pd.concat([df_base_data, df_mod_data[~df_mod_data[df_mod_data.columns[0]].isin(df_base_data[df_base_data.columns[0]])]], sort=False)
+
+    # Reconstruct the merged dataframe
+    merged_df = pd.concat([header_row, dtype_row, merged_data], ignore_index=True)
+
+    # Fill NaN with empty strings
+    merged_df = merged_df.fillna('')
+
+    # Save to CSV without index and header
+    merged_df.to_csv(output_file, index=False, header=False)
+
+    
+def get_default_value(dtype):
+    if dtype == 'boolean':
+        return 'False'
+    elif dtype == 'string':
+        return ''
+    elif dtype == 'int':
+        return '0'
+    elif dtype == 'float':
+        return '0.0'
+    else:
+        return ''
+
+def apply_config(df, file):
+    mod_config = config.get("values", {})
+    col_data_types = {}
+
+    # Assume the data type row is at index 0 after setting columns and dropping header row
+    dtype_row_index = df.index[0]  # The index of data type row
+    data_start_indices = df.index[1:]  # Indices where data starts
+
+    # Step 1: Collect all columns from the config and determine their data types
+    for csv_file, entries in mod_config.items():
+        if file.endswith(csv_file):
+            for identifier, updates in entries.items():
+                for col, value in updates.items():
+                    if col not in col_data_types:
+                        if isinstance(value, bool):
+                            col_data_types[col] = 'boolean'
+                        elif isinstance(value, str):
+                            col_data_types[col] = 'string'
+                        elif isinstance(value, int):
+                            col_data_types[col] = 'int'
+                        elif isinstance(value, float):
+                            col_data_types[col] = 'float'
+                        else:
+                            col_data_types[col] = 'string'  # Default to string
+
+    # Step 2: Add any new columns to df
+    for col, dtype in col_data_types.items():
+        if col not in df.columns:
+            df[col] = ''
+            # Assign data type in the data type row
+            df.loc[dtype_row_index, col] = dtype
+            # Assign default values in data rows
+            default_value = get_default_value(dtype)
+            df.loc[data_start_indices, col] = default_value
+        else:
+            # Ensure data type is set for existing columns
+            if pd.isna(df.loc[dtype_row_index, col]) or df.loc[dtype_row_index, col] == '':
+                df.loc[dtype_row_index, col] = dtype
+
+    # Step 3: Apply default values under '*'
+    for csv_file, entries in mod_config.items():
+        if file.endswith(csv_file):
+            if "*" in entries:
+                updates = entries["*"]
+                for col, value in updates.items():
+                    if col in df.columns:
+                        dtype = df.loc[dtype_row_index, col]
+                        default_value = get_default_value(dtype)
+                        for index in data_start_indices:
+                            current_value = df.at[index, col]
+                            # Only overwrite if current value is empty or default
+                            if pd.isna(current_value) or current_value == default_value or current_value == '':
+                                df.at[index, col] = str(value)
+
+            # Step 4: Apply specific updates for identifiers
+            for identifier, updates in entries.items():
+                if identifier != "*":
+                    for index in data_start_indices:
+                        if df.at[index, df.columns[0]] == identifier:
+                            for col, value in updates.items():
+                                if col in df.columns:
+                                    dtype = df.loc[dtype_row_index, col]
+                                    df.at[index, col] = str(value)
+    return df
+
+
 
 def copy_initial_mod(file_path, target_mod):
     if not os.path.exists(target_mod):
@@ -44,7 +149,7 @@ def copy_initial_mod(file_path, target_mod):
             else:
                 shutil.copy2(src, dest)
 
-def merge_mods_into_base(base_mod, mods_list):
+def merge_mods_into_base(base_mod, mods_list, config):
     paths = {
         "csv_logic": ["characters.csv", "cards.csv", "skills.csv", "skins.csv",
                       "skin_confs.csv", "projectiles.csv", "accessories.csv", "items.csv",
@@ -58,7 +163,9 @@ def merge_mods_into_base(base_mod, mods_list):
             for csv_file in files:
                 mod_csv = os.path.join(mod_path, "assets", folder, csv_file)
                 base_csv = os.path.join(base_mod, "assets", folder, csv_file)
-                merge_csv_files(base_csv, mod_csv, base_csv)
+                values = config["values"].get(csv_file, {})
+                if os.path.exists(mod_csv):
+                    merge_csv_files(base_csv, mod_csv, base_csv)
 
     additional_folders = ["sc", "sc3d", "sfx", "music", "shader", "localization", "image", "badge"]
     for mod in mods_list:
@@ -90,14 +197,11 @@ def extract_files(file_path):
     return mod_name
 
 
-def create_apk(mod_name):
+def create_apk(mod_path):
     try:
         os.makedirs(release_directory, exist_ok=True)
-        
         zip_file_path = os.path.join(apk_directory, f"{mod_name}.apk").replace('./', os.getcwd() + "/")
-
         zip_archive_path = shutil.make_archive(zip_file_path, 'zip', release_directory)
-        
         apk_file_path = zip_file_path
         os.rename(zip_archive_path, apk_file_path)
         
@@ -128,31 +232,28 @@ if __name__ == "__main__":
 
     config = load_configuration(args.config)
     
+    mods = config.get("mods", [])
     mod_name = config.get("mod_name", "All Brawl")
-    mods = config["mods"]
     uber_path = config["uber_path"]
     work_directory = config["work_directory"]
     apk_directory = f"{config['release_directory']}{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
-    print(apk_directory)
-    release_directory = f"{apk_directory}/{mod_name}"
+    release_directory = os.path.join(apk_directory, mod_name)
 
     ensure_directory(work_directory)
     ensure_directory(release_directory)
 
-    if mods:
-        first_mod = mods[0]
-        ensure_directory(release_directory)
-        copy_initial_mod(first_mod, release_directory)
 
-        for mod in mods[1:]:
+    if mods:
+        copy_initial_mod(mods[0], release_directory)
+        for mod in mods:
             try:
                 mod_folder = extract_files(mod)
             except Exception as e:
                 print(f"Error extracting {mod}: {e}")
-            merge_mods_into_base(release_directory, [mod_folder])
+            merge_mods_into_base(release_directory, [mod_folder], config)
 
         print(f"All mods merged into {release_directory}")
         print("Creating apk...")
-        sign(f"{create_apk(mod_name)}", uber_path)
+        sign(f"{create_apk(mods)}", uber_path)
     else:
         print("No mods found")
