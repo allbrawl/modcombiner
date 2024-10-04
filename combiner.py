@@ -49,19 +49,6 @@ def merge_csv_files(base_file, mod_file, output_file):
     # Save to CSV without index and header
     merged_df.to_csv(output_file, index=False, header=False)
 
-    
-def get_default_value(dtype):
-    if dtype == 'boolean':
-        return 'False'
-    elif dtype == 'string':
-        return ''
-    elif dtype == 'int':
-        return '0'
-    elif dtype == 'float':
-        return '0.0'
-    else:
-        return ''
-
 def apply_config(df, file):
     mod_config = config.get("values", {})
     col_data_types = {}
@@ -94,8 +81,7 @@ def apply_config(df, file):
             # Assign data type in the data type row
             df.loc[dtype_row_index, col] = dtype
             # Assign default values in data rows
-            default_value = get_default_value(dtype)
-            df.loc[data_start_indices, col] = default_value
+            df.loc[data_start_indices, col] = str(value)
         else:
             # Ensure data type is set for existing columns
             if pd.isna(df.loc[dtype_row_index, col]) or df.loc[dtype_row_index, col] == '':
@@ -109,11 +95,10 @@ def apply_config(df, file):
                 for col, value in updates.items():
                     if col in df.columns:
                         dtype = df.loc[dtype_row_index, col]
-                        default_value = get_default_value(dtype)
                         for index in data_start_indices:
                             current_value = df.at[index, col]
                             # Only overwrite if current value is empty or default
-                            if pd.isna(current_value) or current_value == default_value or current_value == '':
+                            if pd.isna(current_value) or current_value == str(value) or current_value == '':
                                 df.at[index, col] = str(value)
 
             # Step 4: Apply specific updates for identifiers
