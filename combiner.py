@@ -5,6 +5,7 @@ from datetime import datetime
 import subprocess
 import argparse
 import json
+import glob
 
 def ensure_directory(path):
     if not os.path.exists(path):
@@ -67,10 +68,8 @@ def apply_config(df, file):
                             col_data_types[col] = 'boolean'
                         elif isinstance(value, str):
                             col_data_types[col] = 'string'
-                        elif isinstance(value, int):
+                        elif isinstance(value, int) or isinstance(value, float):
                             col_data_types[col] = 'int'
-                        elif isinstance(value, float):
-                            col_data_types[col] = 'float'
                         else:
                             col_data_types[col] = 'string'  # Default to string
 
@@ -210,6 +209,12 @@ def load_configuration(config_file):
         config = json.load(f)
     return config
 
+def expand_wildcards(paths):
+    expanded_paths = []
+    for path in paths:
+        expanded_paths.extend(glob.glob(path))
+    return expanded_paths
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=False, default="configuration.json")
@@ -227,6 +232,8 @@ if __name__ == "__main__":
     ensure_directory(work_directory)
     ensure_directory(release_directory)
 
+    # Expand wildcards in mods
+    mods = expand_wildcards(mods)
 
     if mods:
         copy_initial_mod(mods[0], release_directory)
