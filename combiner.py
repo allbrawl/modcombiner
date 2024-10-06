@@ -181,23 +181,26 @@ def generate_random_string(length=6):
     characters = string.ascii_letters + string.digits
     return ''.join(random.choice(characters) for _ in range(length))
 
+
 def change_manifest_package(manifest_path, new_package_name, apktool_path):
-    temp_dir = f'/tmp/allbrawl-manifests'
-    os.makedirs(temp_dir, exist_ok=True)
-    subprocess.run(['java', '-jar', apktool_path, 'd', manifest_path, '-o', f"{temp_dir}/{generate_random_string()}"], check=True)
-    manifest_file = os.path.join('temp_dir', 'AndroidManifest.xml')
+    manifest_path = manifest_path.replace("./", f"{os.getcwd()}/")
+    manifest_file = os.path.join(manifest_path, "AndroidManifest.xml")
     
     with open(manifest_file, 'r') as file:
         manifest_content = file.read()
     
-    current_package_name = re.search(r'package="([^"]+)"', manifest_content).group(1)
-    updated_content = manifest_content.replace(f'package="{current_package_name}"', f'package="{new_package_name}"')
-    
-    with open(manifest_file, 'w') as file:
-        file.write(updated_content)
-    
-    subprocess.run([apktool_path, 'b', 'temp_dir', '-o', manifest_path.replace('.apk', '_updated.apk')], check=True)
-    shutil.rmtree('temp_dir')
+    match = re.search(r'package="([^"]+)"', manifest_content)
+    if match:
+        current_package_name = match.group(1)
+        
+        updated_content = manifest_content.replace(current_package_name, new_package_name)
+        
+        with open(manifest_file, 'w') as file:
+            file.write(updated_content)
+        
+        subprocess.run(['java', '-jar', apktool_path, 'b', manifest_path], check=True)
+    else:
+        raise ValueError("Package name not found in the manifest.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -229,7 +232,7 @@ if __name__ == "__main__":
                 print(f"Error extracting {mod}: {e}")
             merge_mods_into_base(release_directory, [mod_folder], config)
 
-        # change_manifest_package(os.path.join(release_directory, 'AndroidManifest.xml'), package_name, config["apktool_path"])
+        change_manifest_package(release_directory, package_name, config["apktool_path"])
 
         print(f"All mods merged into {release_directory}")
         print("Creating apk...")
