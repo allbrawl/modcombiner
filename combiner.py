@@ -9,6 +9,8 @@ import glob
 import re
 import random
 import string
+from sc_compression import decompress, compress
+from sc_compression.signatures import Signatures
 
 def ensure_directory(path):
     if not os.path.exists(path):
@@ -201,6 +203,37 @@ def change_manifest_package(manifest_path, new_package_name, apktool_path):
         subprocess.run(['java', '-jar', apktool_path, 'b', manifest_path], check=True)
     else:
         raise ValueError("Package name not found in the manifest.")
+    
+# https://github.com/xcoder-tool/XCoder/blob/master/system/lib/features/csv/decompress.py
+# https://pypi.org/project/sc-compression/
+def decompress_csv(input, output):
+    for file in os.listdir(input):
+        if file.endswith(".csv"):
+            try:
+                with open(f"{input}/{file}", "rb") as f:
+                    file_data = f.read()
+
+                with open(f"{output}/{file}", "wb") as f:
+                    f.write(decompress(file_data)[0])
+            except Exception as e:
+                print(f"Failed to decompress: {e}")
+
+            print()
+# https://github.com/xcoder-tool/XCoder/blob/master/system/lib/features/csv/compress.py
+# https://pypi.org/project/sc-compression/
+def compress_csv(input, output):
+    for file in os.listdir(input):
+        if file.endswith(".csv"):
+            try:
+                with open(f"{input}/{file}", "rb") as f:
+                    file_data = f.read()
+
+                with open(f"{output}/{file}", "wb") as f:
+                    f.write(compress(file_data, Signatures.LZMA))
+            except Exception as e:
+                print(f"Failed to compress: {e}")
+            
+            print()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
