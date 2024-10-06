@@ -3,7 +3,7 @@
     "./mods/*"
   ],
   "mod_name": "allbrawl",
-  "uber_path": "~/uber-apk-signer-1.3.0.jar",
+  "apktool_path": "/home/natesworks/apktool_2.10.0.jar",
   "work_directory": "/tmp/",
   "release_directory": "./release/",
   "values": {
