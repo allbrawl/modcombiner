@@ -6,6 +6,9 @@ import subprocess
 import argparse
 import json
 import glob
+import re
+import random
+import string
 
 def ensure_directory(path):
     if not os.path.exists(path):
@@ -145,17 +148,21 @@ def extract_files(file_path):
     mod_name = os.path.basename(file_path).replace(".apk", "").replace(".zip", "")
     new_file_path = os.path.join(work_directory, mod_name)
 
-    if file_path.endswith(".apk") or file_path.endswith(".zip"):
-        subprocess.run(['java', '-jar', apktool_path, 'd', file_path, '-o', new_file_path, '-f'], check=True)
+    if os.path.exists(new_file_path) == False:
+        if file_path.endswith(".apk") or file_path.endswith(".zip"):
+            subprocess.run(['java', '-jar', apktool_path, 'd', file_path, '-o', new_file_path], check=True)
+        else:
+            raise ValueError(f"Unsupported file type: {file_path}")
     else:
-        raise ValueError(f"Unsupported file type: {file_path}")
+        print(f"{new_file_path} already exists, skipping...")
 
     return mod_name
 
 def create_apk(mod_path):
     try:
         os.makedirs(release_directory, exist_ok=True)
-        subprocess.run(['java', '-jar', apktool_path, 'b', mod_path, '-o', os.path.join(release_directory, f"{mod_name}.apk"), '-f'], check=True)
+        output_path = os.path.join(release_directory, f"{mod_name}.apk")
+        subprocess.run(['java', '-jar', apktool_path, 'b', mod_path, '-o', output_path], check=True)
     except Exception as e:
         print(f"Error creating APK: {e}")
 
@@ -170,6 +177,28 @@ def expand_wildcards(paths):
         expanded_paths.extend(glob.glob(path))
     return expanded_paths
 
+def generate_random_string(length=6):
+    characters = string.ascii_letters + string.digits
+    return ''.join(random.choice(characters) for _ in range(length))
+
+def change_manifest_package(manifest_path, new_package_name, apktool_path):
+    temp_dir = f'/tmp/allbrawl-manifests'
+    os.makedirs(temp_dir, exist_ok=True)
+    subprocess.run(['java', '-jar', apktool_path, 'd', manifest_path, '-o', f"{temp_dir}/{generate_random_string()}"], check=True)
+    manifest_file = os.path.join('temp_dir', 'AndroidManifest.xml')
+    
+    with open(manifest_file, 'r') as file:
+        manifest_content = file.read()
+    
+    current_package_name = re.search(r'package="([^"]+)"', manifest_content).group(1)
+    updated_content = manifest_content.replace(f'package="{current_package_name}"', f'package="{new_package_name}"')
+    
+    with open(manifest_file, 'w') as file:
+        file.write(updated_content)
+    
+    subprocess.run([apktool_path, 'b', 'temp_dir', '-o', manifest_path.replace('.apk', '_updated.apk')], check=True)
+    shutil.rmtree('temp_dir')
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=False, default="configuration.json")
@@ -179,6 +208,8 @@ if __name__ == "__main__":
     
     mods = config.get("mods", [])
     mod_name = config.get("mod_name", "All Brawl")
+    package_name = config.get("package_name", "com.natesworks.allbrawl")
+    app_icon_path = config.get("app_icon_path")
     apktool_path = config["apktool_path"]
     work_directory = config["work_directory"]
     apk_directory = f"{config['release_directory']}{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
@@ -197,6 +228,8 @@ if __name__ == "__main__":
             except Exception as e:
                 print(f"Error extracting {mod}: {e}")
             merge_mods_into_base(release_directory, [mod_folder], config)
+
+        # change_manifest_package(os.path.join(release_directory, 'AndroidManifest.xml'), package_name, config["apktool_path"])
 
         print(f"All mods merged into {release_directory}")
         print("Creating apk...")
