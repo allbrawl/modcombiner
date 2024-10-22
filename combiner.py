@@ -1,6 +1,6 @@
 import os
 import shutil
-import pandas as pd
+import csv
 from datetime import datetime
 import subprocess
 import argparse
@@ -17,38 +17,36 @@ def ensure_directory(path):
         os.makedirs(path)
 
 def merge_csv_files(base_file, mod_file, output_file):
-    df_base = pd.read_csv(base_file, header=None, dtype=str, keep_default_na=False) if os.path.exists(base_file) else pd.DataFrame()
-    df_mod = pd.read_csv(mod_file, header=None, dtype=str, keep_default_na=False) if os.path.exists(mod_file) else pd.DataFrame()
+    with open(base_file, 'r', newline='', encoding='utf-8') as f:
+        base_reader = csv.reader(f)
+        base_data = list(base_reader)
+    with open(mod_file, 'r', newline='', encoding='utf-8') as f:
+        mod_reader = csv.reader(f)
+        mod_data = list(mod_reader)
 
-    if not df_base.empty:
-        df_base.columns = df_base.iloc[0]
-        df_base = df_base.drop(df_base.index[0])
+    header = base_data[0] if base_data else mod_data[0]
+    base_data = base_data[1:] if base_data else []
+    mod_data = mod_data[1:] if mod_data else []
 
-    if not df_mod.empty:
-        df_mod.columns = df_mod.iloc[0]
-        df_mod = df_mod.drop(df_mod.index[0])
+    base_keys = {row[0]: row for row in base_data}
+    merged_data = base_data.copy()
+    for row in mod_data:
+        if row[0] not in base_keys:
+            merged_data.append(row)
 
-    df_base = apply_config(df_base, base_file)
+    with open(output_file, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        writer.writerows(merged_data)
 
-    header_row = pd.DataFrame([df_base.columns.tolist()], columns=df_base.columns)
-    dtype_row = df_base.iloc[0:1]
 
-    df_base_data = df_base.iloc[1:]
-    dtype_row_mod = df_mod.iloc[0:1]
-    df_mod_data = df_mod.iloc[1:]
-
-    merged_data = pd.concat([df_base_data, df_mod_data[~df_mod_data[df_mod_data.columns[0]].isin(df_base_data[df_base_data.columns[0]])]], sort=False)
-    merged_df = pd.concat([header_row, dtype_row, merged_data], ignore_index=True)
-    merged_df = merged_df.fillna('')
-
-    merged_df.to_csv(output_file, index=False, header=False)
-
-def apply_config(df, file):
+def apply_config(data, file):  # Modified to work with list of lists
     mod_config = config.get("values", {})
     col_data_types = {}
 
-    dtype_row_index = df.index[0]
-    data_start_indices = df.index[1:]
+    header = data[0]
+    dtype_row = data[1]
+    data_rows = data[2:]
 
     for csv_file, entries in mod_config.items():
         if file.endswith(csv_file):
@@ -65,35 +63,37 @@ def apply_config(df, file):
                             col_data_types[col] = 'string'
 
     for col, dtype in col_data_types.items():
-        if col not in df.columns:
-            df[col] = ''
-            df.loc[dtype_row_index, col] = dtype
-            df.loc[data_start_indices, col] = str(value)
+        if col not in header:
+            header.append(col)
+            dtype_row.append(dtype)
+            for row in data_rows:
+                row.append(str(value)) 
         else:
-            if pd.isna(df.loc[dtype_row_index, col]) or df.loc[dtype_row_index, col] == '':
-                df.loc[dtype_row_index, col] = dtype
+            col_index = header.index(col)
+            if not dtype_row[col_index]:
+                dtype_row[col_index] = dtype
 
     for csv_file, entries in mod_config.items():
         if file.endswith(csv_file):
             if "*" in entries:
                 updates = entries["*"]
                 for col, value in updates.items():
-                    if col in df.columns:
-                        dtype = df.loc[dtype_row_index, col]
-                        for index in data_start_indices:
-                            current_value = df.at[index, col]
-                            if pd.isna(current_value) or current_value == str(value) or current_value == '':
-                                df.at[index, col] = str(value)
+                    if col in header:
+                        col_index = header.index(col)
+                        for row in data_rows:
+                            if not row[col_index] or row[col_index] == str(value):
+                                row[col_index] = str(value)
 
             for identifier, updates in entries.items():
                 if identifier != "*":
-                    for index in data_start_indices:
-                        if df.at[index, df.columns[0]] == identifier:
+                    for row in data_rows:
+                        if row[0] == identifier:
                             for col, value in updates.items():
-                                if col in df.columns:
-                                    dtype = df.loc[dtype_row_index, col]
-                                    df.at[index, col] = str(value)
-    return df
+                                if col in header:
+                                    col_index = header.index(col)
+                                    row[col_index] = str(value)
+    return data
+
 
 def copy_initial_mod(file_path, target_mod):
     if not os.path.exists(target_mod):
@@ -114,6 +114,7 @@ def copy_initial_mod(file_path, target_mod):
                 shutil.copytree(src, dest, dirs_exist_ok=True)
             else:
                 shutil.copy2(src, dest)
+
 
 def merge_mods_into_base(base_mod, mods_list, config):
     paths = {
@@ -146,6 +147,7 @@ def merge_mods_into_base(base_mod, mods_list, config):
                         ensure_directory(dest_folder)
                         shutil.copy2(src_file, os.path.join(dest_folder, file))
 
+
 def extract_files(file_path):
     mod_name = os.path.basename(file_path).replace(".apk", "").replace(".zip", "")
     new_file_path = os.path.join(work_directory, mod_name)
@@ -160,6 +162,7 @@ def extract_files(file_path):
 
     return mod_name
 
+
 def create_apk(mod_path):
     try:
         os.makedirs(release_directory, exist_ok=True)
@@ -168,16 +171,19 @@ def create_apk(mod_path):
     except Exception as e:
         print(f"Error creating APK: {e}")
 
+
 def load_configuration(config_file):
     with open(config_file, 'r') as f:
         config = json.load(f)
     return config
+
 
 def expand_wildcards(paths):
     expanded_paths = []
     for path in paths:
         expanded_paths.extend(glob.glob(path))
     return expanded_paths
+
 
 def generate_random_string(length=6):
     characters = string.ascii_letters + string.digits
@@ -187,6 +193,7 @@ def generate_random_string(length=6):
 def change_manifest_package(manifest_path, new_package_name, apktool_path):
     manifest_path = manifest_path.replace("./", f"{os.getcwd()}/")
     manifest_file = os.path.join(manifest_path, "AndroidManifest.xml")
+    file = os.path.join(manifest_path, "AndroidManifest.xml")
     
     with open(manifest_file, 'r') as file:
         manifest_content = file.read()
@@ -203,7 +210,7 @@ def change_manifest_package(manifest_path, new_package_name, apktool_path):
         subprocess.run(['java', '-jar', apktool_path, 'b', manifest_path], check=True)
     else:
         raise ValueError("Package name not found in the manifest.")
-    
+
 # https://github.com/xcoder-tool/XCoder/blob/master/system/lib/features/csv/decompress.py
 # https://pypi.org/project/sc-compression/
 def decompress_csv(input, output):
@@ -218,7 +225,6 @@ def decompress_csv(input, output):
             except Exception as e:
                 print(f"Failed to decompress: {e}")
 
-            print()
 # https://github.com/xcoder-tool/XCoder/blob/master/system/lib/features/csv/compress.py
 # https://pypi.org/project/sc-compression/
 def compress_csv(input, output):
@@ -232,8 +238,6 @@ def compress_csv(input, output):
                     f.write(compress(file_data, Signatures.LZMA))
             except Exception as e:
                 print(f"Failed to compress: {e}")
-            
-            print()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
