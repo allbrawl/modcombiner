@@ -13,10 +13,12 @@ from sc_compression import decompress, compress
 from sc_compression.signatures import Signatures
 
 def ensure_directory(path):
+    """Ensures that the specified directory exists, creating it if necessary."""
     if not os.path.exists(path):
         os.makedirs(path)
 
 def merge_csv_files(base_file, mod_file, output_file):
+    """Merges two CSV files, combining rows from the mod file that do not already exist in the base file."""
     with open(base_file, 'r', newline='', encoding='utf-8') as f:
         base_reader = csv.reader(f)
         base_data = list(base_reader)
@@ -39,8 +41,8 @@ def merge_csv_files(base_file, mod_file, output_file):
         writer.writerow(header)
         writer.writerows(merged_data)
 
-
-def apply_config(data, file):  # Modified to work with list of lists
+def apply_config(data, file):
+    """Applies configuration changes to a list of lists representing CSV data."""
     mod_config = config.get("values", {})
     col_data_types = {}
 
@@ -94,8 +96,8 @@ def apply_config(data, file):  # Modified to work with list of lists
                                     row[col_index] = str(value)
     return data
 
-
 def copy_initial_mod(file_path, target_mod):
+    """Copies the initial mod files from the source path to the target mod folder."""
     if not os.path.exists(target_mod):
         os.makedirs(target_mod)
 
@@ -115,8 +117,8 @@ def copy_initial_mod(file_path, target_mod):
             else:
                 shutil.copy2(src, dest)
 
-
 def merge_mods_into_base(base_mod, mods_list, config):
+    """Merges a list of mod folders into a base mod folder."""
     paths = {
         "csv_logic": ["characters.csv", "cards.csv", "skills.csv", "skins.csv",
                       "skin_confs.csv", "projectiles.csv", "accessories.csv", "items.csv",
@@ -147,8 +149,8 @@ def merge_mods_into_base(base_mod, mods_list, config):
                         ensure_directory(dest_folder)
                         shutil.copy2(src_file, os.path.join(dest_folder, file))
 
-
 def extract_files(file_path):
+    """Extracts the contents of an APK or ZIP file using apktool."""
     mod_name = os.path.basename(file_path).replace(".apk", "").replace(".zip", "")
     new_file_path = os.path.join(work_directory, mod_name)
 
@@ -162,8 +164,8 @@ def extract_files(file_path):
 
     return mod_name
 
-
 def create_apk(mod_path):
+    """Builds an APK file from the provided mod path using apktool."""
     try:
         os.makedirs(release_directory, exist_ok=True)
         output_path = os.path.join(release_directory, f"{mod_name}.apk")
@@ -171,29 +173,28 @@ def create_apk(mod_path):
     except Exception as e:
         print(f"Error creating APK: {e}")
 
-
 def load_configuration(config_file):
+    """Loads the configuration from the specified JSON file."""
     with open(config_file, 'r') as f:
         config = json.load(f)
     return config
 
-
 def expand_wildcards(paths):
+    """Expands wildcard paths into a full list of file paths."""
     expanded_paths = []
     for path in paths:
         expanded_paths.extend(glob.glob(path))
     return expanded_paths
 
-
 def generate_random_string(length=6):
+    """Generates a random string of the specified length using letters and digits."""
     characters = string.ascii_letters + string.digits
     return ''.join(random.choice(characters) for _ in range(length))
 
-
 def change_manifest_package(manifest_path, new_package_name, apktool_path):
+    """Changes the package name in the AndroidManifest.xml file."""
     manifest_path = manifest_path.replace("./", f"{os.getcwd()}/")
     manifest_file = os.path.join(manifest_path, "AndroidManifest.xml")
-    file = os.path.join(manifest_path, "AndroidManifest.xml")
     
     with open(manifest_file, 'r') as file:
         manifest_content = file.read()
@@ -211,9 +212,8 @@ def change_manifest_package(manifest_path, new_package_name, apktool_path):
     else:
         raise ValueError("Package name not found in the manifest.")
 
-# https://github.com/xcoder-tool/XCoder/blob/master/system/lib/features/csv/decompress.py
-# https://pypi.org/project/sc-compression/
 def decompress_csv(input, output):
+    """Decompresses CSV files using the sc_compression library."""
     for file in os.listdir(input):
         if file.endswith(".csv"):
             try:
@@ -225,9 +225,8 @@ def decompress_csv(input, output):
             except Exception as e:
                 print(f"Failed to decompress: {e}")
 
-# https://github.com/xcoder-tool/XCoder/blob/master/system/lib/features/csv/compress.py
-# https://pypi.org/project/sc-compression/
 def compress_csv(input, output):
+    """Compresses CSV files using the sc_compression library."""
     for file in os.listdir(input):
         if file.endswith(".csv"):
             try:
