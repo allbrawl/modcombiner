@@ -12,17 +12,19 @@ import string
 from sc_compression import decompress, compress
 from sc_compression.signatures import Signatures
 
+
 def ensure_directory(path):
     """Ensures that the specified directory exists, creating it if necessary."""
     if not os.path.exists(path):
         os.makedirs(path)
 
+
 def merge_csv_files(base_file, mod_file, output_file):
     """Merges two CSV files, combining rows from the mod file that do not already exist in the base file."""
-    with open(base_file, 'r', newline='', encoding='utf-8') as f:
+    with open(base_file, "r", newline="", encoding="utf-8") as f:
         base_reader = csv.reader(f)
         base_data = list(base_reader)
-    with open(mod_file, 'r', newline='', encoding='utf-8') as f:
+    with open(mod_file, "r", newline="", encoding="utf-8") as f:
         mod_reader = csv.reader(f)
         mod_data = list(mod_reader)
 
@@ -36,10 +38,11 @@ def merge_csv_files(base_file, mod_file, output_file):
         if row[0] not in base_keys:
             merged_data.append(row)
 
-    with open(output_file, 'w', newline='', encoding='utf-8') as f:
+    with open(output_file, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(header)
         writer.writerows(merged_data)
+
 
 def apply_config(data, file):
     """Applies configuration changes to a list of lists representing CSV data."""
@@ -56,20 +59,20 @@ def apply_config(data, file):
                 for col, value in updates.items():
                     if col not in col_data_types:
                         if isinstance(value, bool):
-                            col_data_types[col] = 'boolean'
+                            col_data_types[col] = "boolean"
                         elif isinstance(value, str):
-                            col_data_types[col] = 'string'
+                            col_data_types[col] = "string"
                         elif isinstance(value, int) or isinstance(value, float):
-                            col_data_types[col] = 'int'
+                            col_data_types[col] = "int"
                         else:
-                            col_data_types[col] = 'string'
+                            col_data_types[col] = "string"
 
     for col, dtype in col_data_types.items():
         if col not in header:
             header.append(col)
             dtype_row.append(dtype)
             for row in data_rows:
-                row.append(str(value)) 
+                row.append(str(value))
         else:
             col_index = header.index(col)
             if not dtype_row[col_index]:
@@ -96,6 +99,7 @@ def apply_config(data, file):
                                     row[col_index] = str(value)
     return data
 
+
 def copy_initial_mod(file_path, target_mod):
     """Copies the initial mod files from the source path to the target mod folder."""
     if not os.path.exists(target_mod):
@@ -117,13 +121,23 @@ def copy_initial_mod(file_path, target_mod):
             else:
                 shutil.copy2(src, dest)
 
+
 def merge_mods_into_base(base_mod, mods_list, config):
     """Merges a list of mod folders into a base mod folder."""
     paths = {
-        "csv_logic": ["characters.csv", "cards.csv", "skills.csv", "skins.csv",
-                      "skin_confs.csv", "projectiles.csv", "accessories.csv", "items.csv",
-                      "locations.csv", "maps.csv"],
-        "csv_client": ["sounds.csv", "effects.csv", "animations.csv", "faces.csv"]
+        "csv_logic": [
+            "characters.csv",
+            "cards.csv",
+            "skills.csv",
+            "skins.csv",
+            "skin_confs.csv",
+            "projectiles.csv",
+            "accessories.csv",
+            "items.csv",
+            "locations.csv",
+            "maps.csv",
+        ],
+        "csv_client": ["sounds.csv", "effects.csv", "animations.csv", "faces.csv"],
     }
 
     for mod in mods_list:
@@ -135,7 +149,16 @@ def merge_mods_into_base(base_mod, mods_list, config):
                 if os.path.exists(mod_csv):
                     merge_csv_files(base_csv, mod_csv, base_csv)
 
-    additional_folders = ["sc", "sc3d", "sfx", "music", "shader", "localization", "image", "badge"]
+    additional_folders = [
+        "sc",
+        "sc3d",
+        "sfx",
+        "music",
+        "shader",
+        "localization",
+        "image",
+        "badge",
+    ]
     for mod in mods_list:
         mod_path = os.path.join(work_directory, mod)
         for folder in additional_folders:
@@ -149,6 +172,7 @@ def merge_mods_into_base(base_mod, mods_list, config):
                         ensure_directory(dest_folder)
                         shutil.copy2(src_file, os.path.join(dest_folder, file))
 
+
 def extract_files(file_path):
     """Extracts the contents of an APK or ZIP file using apktool."""
     mod_name = os.path.basename(file_path).replace(".apk", "").replace(".zip", "")
@@ -156,7 +180,10 @@ def extract_files(file_path):
 
     if os.path.exists(new_file_path) == False:
         if file_path.endswith(".apk") or file_path.endswith(".zip"):
-            subprocess.run(['java', '-jar', apktool_path, 'd', file_path, '-o', new_file_path], check=True)
+            subprocess.run(
+                ["java", "-jar", apktool_path, "d", file_path, "-o", new_file_path],
+                check=True,
+            )
         else:
             raise ValueError(f"Unsupported file type: {file_path}")
     else:
@@ -164,20 +191,25 @@ def extract_files(file_path):
 
     return mod_name
 
+
 def create_apk(mod_path):
     """Builds an APK file from the provided mod path using apktool."""
     try:
         os.makedirs(release_directory, exist_ok=True)
         output_path = os.path.join(release_directory, f"{mod_name}.apk")
-        subprocess.run(['java', '-jar', apktool_path, 'b', mod_path, '-o', output_path], check=True)
+        subprocess.run(
+            ["java", "-jar", apktool_path, "b", mod_path, "-o", output_path], check=True
+        )
     except Exception as e:
         print(f"Error creating APK: {e}")
 
+
 def load_configuration(config_file):
     """Loads the configuration from the specified JSON file."""
-    with open(config_file, 'r') as f:
+    with open(config_file, "r") as f:
         config = json.load(f)
     return config
+
 
 def expand_wildcards(paths):
     """Expands wildcard paths into a full list of file paths."""
@@ -186,31 +218,36 @@ def expand_wildcards(paths):
         expanded_paths.extend(glob.glob(path))
     return expanded_paths
 
+
 def generate_random_string(length=6):
     """Generates a random string of the specified length using letters and digits."""
     characters = string.ascii_letters + string.digits
-    return ''.join(random.choice(characters) for _ in range(length))
+    return "".join(random.choice(characters) for _ in range(length))
+
 
 def change_manifest_package(manifest_path, new_package_name, apktool_path):
     """Changes the package name in the AndroidManifest.xml file."""
     manifest_path = manifest_path.replace("./", f"{os.getcwd()}/")
     manifest_file = os.path.join(manifest_path, "AndroidManifest.xml")
-    
-    with open(manifest_file, 'r') as file:
+
+    with open(manifest_file, "r") as file:
         manifest_content = file.read()
-    
+
     match = re.search(r'package="([^"]+)"', manifest_content)
     if match:
         current_package_name = match.group(1)
-        
-        updated_content = manifest_content.replace(current_package_name, new_package_name)
-        
-        with open(manifest_file, 'w') as file:
+
+        updated_content = manifest_content.replace(
+            current_package_name, new_package_name
+        )
+
+        with open(manifest_file, "w") as file:
             file.write(updated_content)
-        
-        subprocess.run(['java', '-jar', apktool_path, 'b', manifest_path], check=True)
+
+        subprocess.run(["java", "-jar", apktool_path, "b", manifest_path], check=True)
     else:
         raise ValueError("Package name not found in the manifest.")
+
 
 def decompress_csv(input, output):
     """Decompresses CSV files using the sc_compression library."""
@@ -225,6 +262,7 @@ def decompress_csv(input, output):
             except Exception as e:
                 print(f"Failed to decompress: {e}")
 
+
 def compress_csv(input, output):
     """Compresses CSV files using the sc_compression library."""
     for file in os.listdir(input):
@@ -238,20 +276,25 @@ def compress_csv(input, output):
             except Exception as e:
                 print(f"Failed to compress: {e}")
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, required=False, default="configuration.json")
+    parser.add_argument(
+        "--config", type=str, required=False, default="configuration.json"
+    )
     args = parser.parse_args()
 
     config = load_configuration(args.config)
-    
+
     mods = config.get("mods", [])
     mod_name = config.get("mod_name", "All Brawl")
     package_name = config.get("package_name", "com.natesworks.allbrawl")
     app_icon_path = config.get("app_icon_path")
     apktool_path = config["apktool_path"]
     work_directory = config["work_directory"]
-    apk_directory = f"{config['release_directory']}{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+    apk_directory = (
+        f"{config['release_directory']}{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+    )
     release_directory = os.path.join(apk_directory, mod_name)
 
     ensure_directory(work_directory)
